@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: lan-postoffice
+    env: python
+    plan: free
+    buildCommand: "true"
+    startCommand: "python3 server.py"
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0

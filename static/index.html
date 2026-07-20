@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>LAN PostOffice</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✉️</text></svg>" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">✉️</span>
+      <span class="brand-name">LAN PostOffice</span>
+    </div>
+    <div class="bar-actions">
+      <button id="inviteBtn" class="ghost" title="Invite a device">＋ Invite</button>
+      <button id="themeBtn" class="ghost icon" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="me-card" id="meCard" title="Click to rename">
+      <span class="avatar" id="meAvatar">🖥️</span>
+      <div class="me-text">
+        <span class="me-name" id="meName">connecting…</span>
+        <span class="me-sub">you · <span id="statusText">connecting</span></span>
+      </div>
+      <span class="rename-hint">✎</span>
+    </section>
+
+    <h2 class="section-title">Mailboxes nearby</h2>
+
+    <section id="peers" class="peers"></section>
+
+    <div id="emptyState" class="empty hidden">
+      <div class="empty-illus" aria-hidden="true">📭</div>
+      <p class="empty-title">No mailboxes nearby yet</p>
+      <p class="empty-sub">Open <b>LAN PostOffice</b> on another device on this same Wi-Fi —
+        it'll appear here automatically.</p>
+      <button id="emptyInvite" class="primary">Show invite link</button>
+    </div>
+
+    <section class="lan-aware">
+      <div class="aware-head">
+        <h2 class="section-title">On your Wi-Fi <span class="aware-note">· awareness only</span></h2>
+        <button id="scanBtn" class="ghost small">Scan network</button>
+      </div>
+      <p class="aware-sub" id="awareSub">See what else is on your network. These devices
+        <b>can't receive files</b> until they open LAN PostOffice — then they jump up to
+        “Mailboxes” above.</p>
+      <div id="lanList" class="lan-list"></div>
+    </section>
+
+    <section id="inboxWrap" class="inbox hidden">
+      <div class="inbox-head">
+        <h2 class="section-title">📬 Inbox</h2>
+        <button id="clearInbox" class="ghost small">Clear</button>
+      </div>
+      <div id="inbox" class="inbox-list"></div>
+    </section>
+  </main>
+
+  <div id="transfers" class="transfers"></div>
+  <div id="toasts" class="toasts"></div>
+
+  <!-- Compose sheet -->
+  <div id="composeBackdrop" class="backdrop hidden">
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <span class="avatar" id="composeAvatar"></span>
+        <div>
+          <div class="sheet-title">Post to <span id="composeName"></span></div>
+          <div class="sheet-sub">Drop files, choose, or send a note</div>
+        </div>
+        <button class="ghost icon" id="composeClose" aria-label="Close">✕</button>
+      </div>
+      <label class="dropzone" id="composeDrop">
+        <input type="file" id="composeFiles" multiple hidden />
+        <span class="dz-icon">📎</span>
+        <span class="dz-text">Drop files or a folder here, or <u>choose files</u></span>
+      </label>
+      <div class="dz-actions">
+        <input type="file" id="composeFolder" webkitdirectory directory multiple hidden />
+        <button class="ghost small" id="composeFolderBtn">📁 Choose folder (sent as .zip)</button>
+      </div>
+      <div class="note-row">
+        <textarea id="composeText" rows="2" placeholder="…or type a quick note / link"></textarea>
+        <button class="primary" id="composeSend">Send note</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming accept dialog -->
+  <div id="acceptBackdrop" class="backdrop hidden">
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <span class="avatar" id="acceptAvatar"></span>
+        <div>
+          <div class="sheet-title"><span id="acceptName"></span> wants to send you</div>
+          <div class="sheet-sub" id="acceptSummary"></div>
+        </div>
+      </div>
+      <div class="file-list" id="acceptList"></div>
+      <div class="sheet-actions">
+        <button class="ghost" id="declineBtn">Decline</button>
+        <button class="primary" id="acceptBtn">Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invite dialog -->
+  <div id="inviteBackdrop" class="backdrop hidden">
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title">Invite a device</div>
+          <div class="sheet-sub">Same Wi-Fi · scan or open this link</div>
+        </div>
+        <button class="ghost icon" id="inviteClose" aria-label="Close">✕</button>
+      </div>
+      <div class="qr" id="qr"></div>
+      <div class="link-row">
+        <input id="inviteUrl" readonly />
+        <button class="primary" id="copyUrl">Copy</button>
+      </div>
+      <p class="hint" id="inviteHint"></p>
+    </div>
+  </div>
+
+  <script src="/vendor/qrcode.js"></script>
+  <script src="/vendor/zip-writer.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
