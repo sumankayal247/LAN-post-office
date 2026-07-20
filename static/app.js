@@ -343,9 +343,21 @@ async function flushIce(t) {
 
 function newPC(t, peerId) {
   const pc = new RTCPeerConnection(RTC_CONFIG);
-  pc.onicecandidate = (e) => { if (e.candidate) signalTo(peerId, { kind: "rtc-ice", transferId: t.id, candidate: e.candidate }); };
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      console.debug("[lpo:ice-candidate]", e.candidate.type, e.candidate.protocol, e.candidate.address || "");
+      signalTo(peerId, { kind: "rtc-ice", transferId: t.id, candidate: e.candidate });
+    }
+  };
+  pc.oniceconnectionstatechange = () => console.debug("[lpo:ice-state]", pc.iceConnectionState);
   pc.onconnectionstatechange = () => {
-    if (["failed", "closed"].includes(pc.connectionState) && t.status !== "done") failTransfer(t);
+    console.debug("[lpo:conn-state]", pc.connectionState);
+    if (["failed", "closed"].includes(pc.connectionState) && t.status !== "done") {
+      if (pc.connectionState === "failed") {
+        console.warn("[lpo] WebRTC connection failed — no working STUN/TURN path was found between the two devices. ICE state:", pc.iceConnectionState);
+      }
+      failTransfer(t);
+    }
   };
   return pc;
 }
