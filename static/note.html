@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Note — LAN PostOffice</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .note-page { max-width: 720px; margin: 40px auto; padding: 0 16px 60px; }
+    .note-hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+    .note-hdr h1 { font-size: 17px; margin: 0; }
+    .note-body { font-size: 15px; line-height: 1.6; word-break: break-word; }
+    .note-body p { margin: 0 0 12px; }
+    .note-body a { color: var(--accent); }
+    .note-missing { color: var(--muted); padding: 40px 0; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="note-page">
+    <div class="note-hdr">
+      <h1 id="noteTitle">Note</h1>
+      <button class="primary" id="copyBtn">Copy</button>
+    </div>
+    <div class="note-body" id="noteBody"></div>
+  </main>
+  <script src="/note.js"></script>
+</body>
+</html>

@@ -41,6 +41,69 @@ function detectDevice() {
   if (/Mobi|Android|iPhone|iPod/i.test(ua)) return "mobile";
   return "desktop";
 }
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+/* ------------------------------------------------------------ sanitizer */
+/* Notes may carry HTML pasted by the sender (kept for formatting), but that
+   HTML arrives over the network from another person's browser — treat it as
+   untrusted and strip anything that isn't plain text formatting. */
+const ALLOWED_TAGS = new Set([
+  "B", "STRONG", "I", "EM", "U", "S", "STRIKE", "A", "P", "BR", "DIV", "SPAN",
+  "UL", "OL", "LI", "BLOCKQUOTE", "CODE", "PRE", "H1", "H2", "H3", "H4", "H5",
+  "H6", "SUB", "SUP", "HR", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH",
+]);
+const ALLOWED_STYLE_PROPS = new Set([
+  "color", "background-color", "font-weight", "font-style", "text-decoration", "text-align", "font-size",
+]);
+function sanitizeHtml(html) {
+  const doc = new DOMParser().parseFromString(`<div>${html || ""}</div>`, "text/html");
+  const root = doc.body.firstChild;
+  if (!root) return "";
+  cleanNode(root);
+  return root.innerHTML;
+}
+function cleanNode(node) {
+  for (const child of [...node.childNodes]) {
+    if (child.nodeType === Node.TEXT_NODE) continue;
+    if (child.nodeType !== Node.ELEMENT_NODE) { child.remove(); continue; }
+    const tag = child.tagName;
+    if (!ALLOWED_TAGS.has(tag)) {
+      if (["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "FORM",
+           "INPUT", "BUTTON", "SVG", "IMG", "VIDEO", "AUDIO"].includes(tag)) {
+        child.remove();
+      } else {
+        // unknown/disallowed wrapper — unwrap, keep cleaned children
+        cleanNode(child);
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        child.remove();
+      }
+      continue;
+    }
+    for (const attr of [...child.attributes]) {
+      const name = attr.name.toLowerCase();
+      if (name === "href" && tag === "A") {
+        const val = attr.value.trim();
+        if (!/^(https?:|mailto:)/i.test(val)) child.removeAttribute("href");
+        else { child.setAttribute("target", "_blank"); child.setAttribute("rel", "noopener noreferrer"); }
+        continue;
+      }
+      if (name === "style") {
+        const clean = [...attr.value.matchAll(/([a-z-]+)\s*:\s*([^;]+)/gi)]
+          .filter(([, prop]) => ALLOWED_STYLE_PROPS.has(prop.toLowerCase()))
+          .map(([, prop, val]) => `${prop}:${val.trim()}`).join(";");
+        if (clean) child.setAttribute("style", clean); else child.removeAttribute("style");
+        continue;
+      }
+      if ((name === "colspan" || name === "rowspan") && (tag === "TD" || tag === "TH") && /^\d+$/.test(attr.value)) continue;
+      child.removeAttribute(attr.name);
+    }
+    cleanNode(child);
+  }
+}
 
 /* ------------------------------------------------------------ signaling */
 function connect() {
@@ -54,12 +117,16 @@ function connect() {
       name: localStorage.getItem("lpo-name") || null, device: detectDevice(),
     });
   };
-  ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
+  ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (err) { console.warn("bad ws message", err); } };
   ws.onclose = () => { setStatus("reconnecting"); setTimeout(connect, 1500); };
   ws.onerror = () => ws.close();
 }
 function sigSend(o) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(o)); }
 function signalTo(peerId, data) { sigSend({ type: "signal", to: peerId, data }); }
+// keep the connection warm — hosted proxies (e.g. Render's free tier) can
+// silently drop a WebSocket that's been idle for a while, which otherwise
+// makes offers vanish into thin air on the receiving end
+setInterval(() => sigSend({ type: "ping" }), 25000);
 
 function handle(m) {
   switch (m.type) {
@@ -94,7 +161,8 @@ function onSignal(from, d) {
     case "rtc-answer":  return onRtcAnswer(d);
     case "rtc-ice":     return onRtcIce(d);
     case "cancel":      return onCancel(d.transferId);
-    case "message":     return showMessage(from, d.text);
+    case "message":     return showMessage(from, d.text, d.html);
+    case "unreachable": return onUnreachable(d.transferId);
   }
 }
 
@@ -176,16 +244,23 @@ function sendFiles(peerId, files) {
   state.transfers.set(id, t);
   renderTransfer(t);
   signalTo(peerId, { kind: "offer-files", transferId: id, files: meta, totalBytes });
+  setTimeout(() => {
+    if (t.status === "offering") {
+      t.status = "failed"; renderTransfer(t);
+      toast(`No response from ${nameOf(peerId)} — are they still online?`);
+    }
+  }, 45000);
 }
 
-function sendText(peerId, text) {
-  text = (text || "").trim();
+function sendNote(peerId, el) {
+  const text = (el.innerText || "").trim();
   if (!text) return;
+  const html = sanitizeHtml(el.innerHTML);
   if (text.length > TEXT_MAX) {
     const f = new File([text], `note-${Date.now()}.txt`, { type: "text/plain" });
     return sendFiles(peerId, [f]);
   }
-  signalTo(peerId, { kind: "message", text });
+  signalTo(peerId, { kind: "message", text, html });
   toast("Note sent ✓");
 }
 
@@ -350,7 +425,28 @@ function onDeclined(id) {
   t.status = "declined"; renderTransfer(t);
   toast(`${nameOf(t.peerId)} declined`);
 }
-function onCancel(id) { const t = state.transfers.get(id); if (t) failTransfer(t); }
+function cancelTransfer(t) {
+  if (t.status !== "offering") return;
+  signalTo(t.peerId, { kind: "cancel", transferId: t.id });
+  t.status = "declined"; renderTransfer(t);
+  toast("Send cancelled");
+}
+function onCancel(id) {
+  const t = state.transfers.get(id);
+  if (t && t.dir === "in" && t.status === "pending") {
+    state.transfers.delete(id);
+    if (pendingAcceptId === id) { hide("#acceptBackdrop"); pendingAcceptId = null; }
+    toast("The sender cancelled that send");
+    return;
+  }
+  if (t) failTransfer(t);
+}
+function onUnreachable(id) {
+  const t = state.transfers.get(id);
+  if (!t || t.status === "done" || t.status === "failed") return;
+  t.status = "failed"; renderTransfer(t);
+  toast(`${nameOf(t.peerId)} isn't connected anymore`);
+}
 function nameOf(peerId) { return (state.peers.get(peerId) || {}).name || "device"; }
 
 /* --------------------------------------------------------------- render */
@@ -417,7 +513,8 @@ function renderTransfer(t) {
     el.id = "x-" + t.id; el.className = "xfer";
     el.innerHTML =
       '<div class="xfer-top"><span class="ic"></span>' +
-      '<span class="xfer-name"></span><span class="xfer-pct"></span></div>' +
+      '<span class="xfer-name"></span><span class="xfer-pct"></span>' +
+      '<button class="xfer-cancel ghost small hidden" type="button">Cancel</button></div>' +
       '<div class="bar-track"><div class="bar-fill"></div></div>' +
       '<div class="xfer-sub"></div>';
     $("#transfers").appendChild(el);
@@ -437,6 +534,15 @@ function renderTransfer(t) {
     t.status === "declined" ? "declined" : pct + "%";
   el.querySelector(".bar-fill").style.width =
     (t.status === "done" ? 100 : t.status === "failed" || t.status === "declined" ? 100 : pct) + "%";
+
+  const cancelBtn = el.querySelector(".xfer-cancel");
+  if (t.dir === "out" && t.status === "offering") {
+    cancelBtn.classList.remove("hidden");
+    cancelBtn.onclick = (e) => { e.stopPropagation(); cancelTransfer(t); };
+  } else {
+    cancelBtn.classList.add("hidden");
+    cancelBtn.onclick = null;
+  }
 
   const statusWord = {
     offering: "waiting for accept…", connecting: "connecting…",
@@ -484,25 +590,56 @@ function addInboxFile(t, name, blob) {
   item.append(thumb, meta, save);
   inbox.prepend(item);
 }
-function showMessage(from, text) {
+async function copyRich(html, text) {
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        "text/plain": new Blob([text], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+      });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+  }
+}
+function openNotePage(html, from) {
+  const id = newId();
+  const title = `Note from ${nameOf(from)}`;
+  const tmp = document.createElement("div"); tmp.innerHTML = html;
+  try {
+    sessionStorage.setItem("lpo-note-" + id, JSON.stringify({ title, html, text: tmp.innerText }));
+  } catch {
+    toast("Couldn't open the note"); return;
+  }
+  window.open(`/note.html#${id}`, "_blank", "noopener");
+}
+function showMessage(from, text, html) {
   showInbox();
+  const safeHtml = html ? sanitizeHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
   const item = document.createElement("div");
-  item.className = "inbox-item";
+  item.className = "inbox-item inbox-item-note";
   const thumb = document.createElement("div");
   thumb.className = "inbox-thumb"; thumb.textContent = "📝";
   const meta = document.createElement("div"); meta.className = "inbox-meta";
   const sub = document.createElement("div"); sub.className = "inbox-sub";
-  sub.textContent = `note · from ${nameOf(from)}`;
-  const body = document.createElement("div"); body.className = "inbox-text"; body.textContent = text;
+  sub.textContent = `note · from ${nameOf(from)} · tap to open`;
+  const body = document.createElement("div");
+  body.className = "inbox-text"; body.innerHTML = safeHtml;
   meta.append(body, sub);
   const copy = document.createElement("button");
   copy.className = "ghost"; copy.textContent = "Copy";
-  copy.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; }
-    catch { copy.textContent = "—"; }
+  copy.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const ok = await copyRich(safeHtml, text);
+    copy.textContent = ok ? "Copied" : "—";
     setTimeout(() => (copy.textContent = "Copy"), 1200);
   });
   item.append(thumb, meta, copy);
+  item.addEventListener("click", () => openNotePage(safeHtml, from));
   inbox.prepend(item);
   toast(`Note from ${nameOf(from)}`);
 }
@@ -525,7 +662,7 @@ function openCompose(peerId, focusNote) {
   state.composeTarget = peerId;
   setAvatar($("#composeAvatar"), p);
   $("#composeName").textContent = p.name;
-  $("#composeText").value = "";
+  $("#composeText").innerHTML = "";
   $("#composeFiles").value = "";
   show("#composeBackdrop");
   if (focusNote) setTimeout(() => $("#composeText").focus(), 50);
@@ -547,8 +684,14 @@ $("#composeFolder").addEventListener("change", async (e) => {
   finally { e.target.value = ""; }
 });
 $("#composeSend").addEventListener("click", () => {
-  if (state.composeTarget) sendText(state.composeTarget, $("#composeText").value);
+  if (state.composeTarget) sendNote(state.composeTarget, $("#composeText"));
   hide("#composeBackdrop");
+});
+$("#composeText").addEventListener("paste", (e) => {
+  const html = e.clipboardData && e.clipboardData.getData("text/html");
+  if (!html) return; // let the browser's default plain-text paste happen
+  e.preventDefault();
+  document.execCommand("insertHTML", false, sanitizeHtml(html));
 });
 const cz = $("#composeDrop");
 cz.addEventListener("dragover", (e) => { e.preventDefault(); cz.classList.add("drag"); });
@@ -560,7 +703,9 @@ cz.addEventListener("drop", async (e) => {
   if (files.length && target) { sendFiles(target, files); hide("#composeBackdrop"); }
 });
 
+let pendingAcceptId = null;
 function showAccept(peer, d, t) {
+  pendingAcceptId = t.id;
   setAvatar($("#acceptAvatar"), peer);
   $("#acceptName").textContent = peer.name;
   $("#acceptSummary").textContent =
@@ -573,7 +718,7 @@ function showAccept(peer, d, t) {
     row.append(nm, sz); list.appendChild(row);
   }
   show("#acceptBackdrop");
-  const close = () => hide("#acceptBackdrop");
+  const close = () => { hide("#acceptBackdrop"); pendingAcceptId = null; };
   $("#acceptBtn").onclick = () => {
     close(); t.status = "accepting"; renderTransfer(t);
     signalTo(t.peerId, { kind: "accept", transferId: t.id });
@@ -665,12 +810,13 @@ async function scanLan() {
   btn.disabled = true;
   const label = btn.textContent;
   btn.textContent = "Scanning…";
+  $("#lanList").innerHTML = '<div class="aware-loading"><span class="spinner"></span> Scanning your network…</div>';
   try {
     const r = await fetch("/lan-scan", { cache: "no-store" });
     const j = await r.json();
     if (j.hosted) { $(".lan-aware").classList.add("hidden"); return; }
     renderLan(j.devices || []);
-  } catch { toast("Scan failed"); }
+  } catch { toast("Scan failed"); $("#lanList").textContent = ""; }
   finally { btn.disabled = false; btn.textContent = label; }
 }
 function renderLan(devices) {

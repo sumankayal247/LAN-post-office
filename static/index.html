@@ -86,7 +86,8 @@
         <button class="ghost small" id="composeFolderBtn">📁 Choose folder (sent as .zip)</button>
       </div>
       <div class="note-row">
-        <textarea id="composeText" rows="2" placeholder="…or type a quick note / link"></textarea>
+        <div id="composeText" class="note-input" contenteditable="true" role="textbox"
+             aria-multiline="true" data-placeholder="…or type/paste a quick note — formatting is kept"></div>
         <button class="primary" id="composeSend">Send note</button>
       </div>
     </div>
