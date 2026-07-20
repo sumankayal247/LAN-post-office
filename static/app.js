@@ -6,7 +6,19 @@
 const $ = (s, r = document) => r.querySelector(s);
 const CHUNK = 64 * 1024;          // 64 KB data-channel chunks
 const HIGH_WATER = 8 * 1024 * 1024;
-const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+// STUN alone can't establish a direct link across every NAT type (common once
+// two devices are on different networks rather than the same LAN) — a TURN
+// relay is the fallback for those cases. Traffic through it is still
+// DTLS-encrypted end to end; the relay only ever sees ciphertext.
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:openrelay.metered.ca:80" },
+    { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+  ],
+};
 const TEXT_MAX = 8 * 1024;        // notes above this become a .txt file
 
 const state = {
@@ -615,7 +627,10 @@ function openNotePage(html, from) {
   } catch {
     toast("Couldn't open the note"); return;
   }
-  window.open(`/note.html#${id}`, "_blank", "noopener");
+  // no "noopener" here on purpose: note.html reads its content via
+  // sessionStorage, which browsers only copy into a same-origin tab opened
+  // *with* an opener relationship intact.
+  window.open(`/note.html#${id}`, "_blank");
 }
 function showMessage(from, text, html) {
   showInbox();
