@@ -1,8 +1,8 @@
 # ✉️ LAN PostOffice
 
-## 🔴 [**Go to Live →**](https://render.com/deploy?repo=https://github.com/sumankayal247/LAN-post-office)
+## 🔴 [**Go to Live →**](https://lan-post-office.onrender.com)
 
-*(one click deploys your own free live instance on Render — see [Deploy your own](#deploy-your-own))*
+*(free tier — spins down when idle, so the first load after a while can take ~30s to wake up)*
 
 Drop files, whole folders, and notes between any devices — straight from the browser. No install, no account, no cloud storage.
 
