@@ -75,3 +75,22 @@ connection is direct device-to-device at full LAN speed.
 environment, so it drops straight onto any Python host. A [`render.yaml`](render.yaml)
 blueprint is included — on [Render](https://render.com), **New → Blueprint**,
 point it at this repo, and it deploys as a free web service.
+
+### Reliable transfers across two different networks (TURN)
+
+Once two devices aren't on the same Wi-Fi, plain STUN sometimes can't find a
+direct path between them (symmetric NAT, mobile carrier CGNAT, some
+corporate networks) — the transfer gets stuck on "connecting" then fails.
+The fix is a TURN relay. A free public one is baked in as a fallback, but
+it's a shared community server and can be unreliable. For your own reliable
+relay, set up a free [Cloudflare Calls TURN](https://developers.cloudflare.com/calls/turn/)
+app (no card required):
+
+1. Cloudflare dashboard → **Realtime** (Calls) → **TURN** → create an app.
+2. Copy its **Turn Token ID** and generate an **API Token**.
+3. On Render, add them as environment variables on the service:
+   `TURN_KEY_ID` and `TURN_API_TOKEN`.
+
+The server mints short-lived TURN credentials on demand (`/turn-credentials`)
+and the client prefers them over the public fallback automatically — nothing
+else to configure.

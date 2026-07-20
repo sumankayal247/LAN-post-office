@@ -9,3 +9,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      # Optional — a free Cloudflare Calls TURN app's credentials. Without
+      # these, WebRTC falls back to a public demo TURN server that isn't
+      # reliable for transfers across two different networks. See README.
+      - key: TURN_KEY_ID
+        sync: false
+      - key: TURN_API_TOKEN
+        sync: false

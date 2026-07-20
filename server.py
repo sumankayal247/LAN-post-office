@@ -17,6 +17,8 @@ import struct
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -166,6 +168,52 @@ def connected_ips():
         return {p.ip for r in rooms.values() for p in r.values() if p.ip}
 
 
+# --------------------------------------------------------------- TURN relay
+# Optional: STUN alone can't traverse every NAT (two devices on different
+# networks, symmetric NAT, CGNAT/mobile carriers, ...). If TURN_KEY_ID and
+# TURN_API_TOKEN are set (from a free Cloudflare Calls TURN app), the server
+# mints short-lived TURN credentials for clients to fall back to. Without
+# them, WebRTC just uses public STUN + falls back to a shaky public demo TURN
+# — fine on the same network, unreliable across the open internet.
+TURN_KEY_ID = os.environ.get("TURN_KEY_ID", "")
+TURN_API_TOKEN = os.environ.get("TURN_API_TOKEN", "")
+TURN_TTL = 3600
+TURN_LOCK = threading.Lock()
+TURN_CACHE = {"at": 0.0, "data": None}
+
+
+def _fetch_turn_credentials():
+    url = f"https://rtc.live.cloudflare.com/v1/turn/keys/{TURN_KEY_ID}/credentials/generate"
+    body = json.dumps({"ttl": TURN_TTL}).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={"Authorization": f"Bearer {TURN_API_TOKEN}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return None
+    ice = data.get("iceServers")
+    if isinstance(ice, dict):
+        ice = [ice]
+    return ice or None
+
+
+def turn_credentials():
+    if not (TURN_KEY_ID and TURN_API_TOKEN):
+        return None
+    now = time.time()
+    with TURN_LOCK:
+        if TURN_CACHE["data"] is not None and now - TURN_CACHE["at"] < TURN_TTL - 300:
+            return TURN_CACHE["data"]
+        fresh = _fetch_turn_credentials()
+        if fresh:
+            TURN_CACHE["at"] = now
+            TURN_CACHE["data"] = fresh
+        return TURN_CACHE["data"]
+
+
 # ---------------------------------------------------------------- room registry
 lock = threading.Lock()
 rooms = {}  # room -> { peer_id -> Peer }
@@ -309,7 +357,20 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_ws()
         if path == "/lan-scan":
             return self.serve_scan()
+        if path == "/turn-credentials":
+            return self.serve_turn()
         return self.serve_static(path)
+
+    def serve_turn(self):
+        servers = turn_credentials() or []
+        body = json.dumps({"iceServers": servers}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
 
     def serve_scan(self):
         if HOSTED:

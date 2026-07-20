@@ -10,7 +10,7 @@ const HIGH_WATER = 8 * 1024 * 1024;
 // two devices are on different networks rather than the same LAN) — a TURN
 // relay is the fallback for those cases. Traffic through it is still
 // DTLS-encrypted end to end; the relay only ever sees ciphertext.
-const RTC_CONFIG = {
+let RTC_CONFIG = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:openrelay.metered.ca:80" },
@@ -19,6 +19,18 @@ const RTC_CONFIG = {
     { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
   ],
 };
+// If the server has a real TURN provider configured (see server.py), prefer
+// those short-lived credentials over the shaky public demo TURN above.
+async function loadTurnConfig() {
+  try {
+    const r = await fetch("/turn-credentials", { cache: "no-store" });
+    const j = await r.json();
+    if (j.iceServers && j.iceServers.length) {
+      RTC_CONFIG = { iceServers: [...j.iceServers, ...RTC_CONFIG.iceServers] };
+      console.debug("[lpo] using server-provided TURN credentials");
+    }
+  } catch { /* keep the built-in fallback servers */ }
+}
 const TEXT_MAX = 8 * 1024;        // notes above this become a .txt file
 
 const state = {
@@ -886,4 +898,5 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") ["#composeBackdrop", "#inviteBackdrop"].forEach(hide);
 });
 
+loadTurnConfig();
 connect();
