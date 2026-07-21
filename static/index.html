@@ -72,16 +72,19 @@
         <span class="avatar" id="composeAvatar"></span>
         <div>
           <div class="sheet-title">Post to <span id="composeName"></span></div>
-          <div class="sheet-sub">Drop files, choose, or send a note</div>
+          <div class="sheet-sub">Send a note — file &amp; folder sending is paused for now</div>
         </div>
         <button class="ghost icon" id="composeClose" aria-label="Close">✕</button>
       </div>
-      <label class="dropzone" id="composeDrop">
+      <!-- File/folder sending is paused (WebRTC transfer reliability across
+           networks is being revisited) — inputs kept in the DOM so app.js's
+           element lookups don't break, just hidden from the UI. -->
+      <label class="dropzone hidden" id="composeDrop">
         <input type="file" id="composeFiles" multiple hidden />
         <span class="dz-icon">📎</span>
         <span class="dz-text">Drop files or a folder here, or <u>choose files</u></span>
       </label>
-      <div class="dz-actions">
+      <div class="dz-actions hidden">
         <input type="file" id="composeFolder" webkitdirectory directory multiple hidden />
         <button class="ghost small" id="composeFolderBtn">📁 Choose folder (sent as .zip)</button>
       </div>

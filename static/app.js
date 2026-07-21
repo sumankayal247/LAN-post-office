@@ -32,6 +32,12 @@ async function loadTurnConfig() {
   } catch { /* keep the built-in fallback servers */ }
 }
 const TEXT_MAX = 8 * 1024;        // notes above this become a .txt file
+// File/folder transfer (WebRTC) is paused while cross-network reliability is
+// revisited — see the TURN discussion in README. Notes still work fine since
+// they never touch WebRTC, just the WebSocket signaling relay. Flip this back
+// on (and un-hide the compose dropzone/folder button in index.html) later.
+const FILE_TRANSFER_ENABLED = false;
+const NOTES_CACHE_LIMIT = 50;
 
 const state = {
   ws: null,
@@ -255,6 +261,7 @@ async function filesFromDrop(dataTransfer) {
 
 /* sender: announce intent ------------------------------------------------ */
 function sendFiles(peerId, files) {
+  if (!FILE_TRANSFER_ENABLED) { toast("File sending is paused for now — notes still work"); return; }
   files = [...files].filter((f) => f && (f.size > 0 || f.size === 0));
   if (!files.length) return;
   const id = newId();
@@ -280,16 +287,18 @@ function sendNote(peerId, el) {
   const text = (el.innerText || "").trim();
   if (!text) return;
   const html = sanitizeHtml(el.innerHTML);
-  if (text.length > TEXT_MAX) {
+  if (FILE_TRANSFER_ENABLED && text.length > TEXT_MAX) {
     const f = new File([text], `note-${Date.now()}.txt`, { type: "text/plain" });
     return sendFiles(peerId, [f]);
   }
+  if (text.length > 400 * 1024) { toast("That note is too long to send right now"); return; }
   signalTo(peerId, { kind: "message", text, html });
   toast("Note sent ✓");
 }
 
 /* receiver: accept gate -------------------------------------------------- */
 function promptIncoming(from, d) {
+  if (!FILE_TRANSFER_ENABLED) return; // ignore incoming file offers while paused
   if (state.transfers.has(d.transferId)) return;
   const peer = state.peers.get(from) || { name: "Someone", emoji: "✉️", color: "var(--accent)" };
   const t = {
@@ -513,7 +522,8 @@ function renderPeers() {
     const nm = document.createElement("div");
     nm.className = "peer-name"; nm.textContent = p.name;
     const hint = document.createElement("div");
-    hint.className = "peer-hint"; hint.textContent = "drop or tap to send";
+    hint.className = "peer-hint";
+    hint.textContent = FILE_TRANSFER_ENABLED ? "drop or tap to send" : "tap to send a note";
 
     const acts = document.createElement("div");
     acts.className = "peer-actions";
@@ -526,14 +536,16 @@ function renderPeers() {
     card.addEventListener("click", () => openCompose(p.peerId));
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") openCompose(p.peerId); });
 
-    // drag & drop straight onto a mailbox
-    card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drag"); });
-    card.addEventListener("dragleave", () => card.classList.remove("drag"));
-    card.addEventListener("drop", async (e) => {
-      e.preventDefault(); card.classList.remove("drag");
-      const files = await filesFromDrop(e.dataTransfer);
-      if (files.length) sendFiles(p.peerId, files);
-    });
+    // drag & drop straight onto a mailbox — paused along with file sending
+    if (FILE_TRANSFER_ENABLED) {
+      card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drag"); });
+      card.addEventListener("dragleave", () => card.classList.remove("drag"));
+      card.addEventListener("drop", async (e) => {
+        e.preventDefault(); card.classList.remove("drag");
+        const files = await filesFromDrop(e.dataTransfer);
+        if (files.length) sendFiles(p.peerId, files);
+      });
+    }
 
     wrap.appendChild(card);
   }
@@ -642,9 +654,9 @@ async function copyRich(html, text) {
     try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
   }
 }
-function openNotePage(html, from) {
+function openNotePage(html, fromName) {
   const id = newId();
-  const title = `Note from ${nameOf(from)}`;
+  const title = `Note from ${fromName}`;
   const tmp = document.createElement("div"); tmp.innerHTML = html;
   try {
     sessionStorage.setItem("lpo-note-" + id, JSON.stringify({ title, html, text: tmp.innerText }));
@@ -656,34 +668,59 @@ function openNotePage(html, from) {
   // *with* an opener relationship intact.
   window.open(`/note.html#${id}`, "_blank");
 }
-function showMessage(from, text, html) {
+/* notes are cached in localStorage (per room) so they survive a reload —
+   files never are, since the bytes only ever live in memory/WebRTC. */
+function notesKey() { return "lpo-notes:" + state.room; }
+function saveNote(entry) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(notesKey()) || "[]");
+    arr.push(entry);
+    while (arr.length > NOTES_CACHE_LIMIT) arr.shift();
+    localStorage.setItem(notesKey(), JSON.stringify(arr));
+  } catch { /* storage unavailable/full — just skip caching this one */ }
+}
+function loadCachedNotes() {
+  try { return JSON.parse(localStorage.getItem(notesKey()) || "[]"); }
+  catch { return []; }
+}
+function restoreCachedNotes() {
+  for (const entry of loadCachedNotes()) renderNoteItem(entry);
+}
+
+function renderNoteItem(entry) {
   showInbox();
-  const safeHtml = html ? sanitizeHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
   const item = document.createElement("div");
   item.className = "inbox-item inbox-item-note";
   const thumb = document.createElement("div");
   thumb.className = "inbox-thumb"; thumb.textContent = "📝";
   const meta = document.createElement("div"); meta.className = "inbox-meta";
   const sub = document.createElement("div"); sub.className = "inbox-sub";
-  sub.textContent = `note · from ${nameOf(from)} · tap to open`;
+  sub.textContent = `note · from ${entry.fromName} · tap to open`;
   const body = document.createElement("div");
-  body.className = "inbox-text"; body.innerHTML = safeHtml;
+  body.className = "inbox-text"; body.innerHTML = entry.html;
   meta.append(body, sub);
   const copy = document.createElement("button");
   copy.className = "ghost"; copy.textContent = "Copy";
   copy.addEventListener("click", async (e) => {
     e.stopPropagation();
-    const ok = await copyRich(safeHtml, text);
+    const ok = await copyRich(entry.html, entry.text);
     copy.textContent = ok ? "Copied" : "—";
     setTimeout(() => (copy.textContent = "Copy"), 1200);
   });
   item.append(thumb, meta, copy);
-  item.addEventListener("click", () => openNotePage(safeHtml, from));
+  item.addEventListener("click", () => openNotePage(entry.html, entry.fromName));
   inbox.prepend(item);
-  toast(`Note from ${nameOf(from)}`);
+}
+function showMessage(from, text, html) {
+  const safeHtml = html ? sanitizeHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
+  const entry = { fromName: nameOf(from), text, html: safeHtml };
+  renderNoteItem(entry);
+  saveNote(entry);
+  toast(`Note from ${entry.fromName}`);
 }
 $("#clearInbox").addEventListener("click", () => {
   inbox.textContent = ""; $("#inboxWrap").classList.add("hidden");
+  try { localStorage.removeItem(notesKey()); } catch {}
 });
 
 /* ------------------------------------------------------------- dialogs */
@@ -826,6 +863,7 @@ $("#meCard").addEventListener("click", () => {
 
 /* ------------------------------------------------------- global paste */
 window.addEventListener("paste", (e) => {
+  if (!FILE_TRANSFER_ENABLED) return; // file sending paused — pasting into the note box still works
   const items = e.clipboardData;
   if (!items) return;
   const files = [...(items.files || [])];
@@ -898,5 +936,6 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") ["#composeBackdrop", "#inviteBackdrop"].forEach(hide);
 });
 
+restoreCachedNotes();
 loadTurnConfig();
 connect();
