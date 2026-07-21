@@ -244,47 +244,40 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 22px 16px 120px; }
 .note-actions { display: flex; justify-content: flex-end; }
 .note-actions .primary { padding: 10px 22px; }
 
-/* ---------------------------------------------------- compose sheet skin */
+/* ------------------------------------ compose sheet: bolder rounded card */
+/* Same idea as the rest of the app (var(--card)/var(--accent), light/dark
+   aware) — just a thicker accent border, a centered title, and a pill
+   send button instead of the default sheet chrome. */
 .compose-sheet {
-  background: #0c1a16; border: 3px solid #34d399; border-radius: 28px;
-  box-shadow: 0 0 0 1px rgba(52, 211, 153, .15), 0 20px 50px rgba(0, 0, 0, .55);
+  background: var(--card); border: 2.5px solid var(--accent); border-radius: 26px;
+  box-shadow: var(--shadow);
 }
-.compose-sheet .sheet-head { display: block; position: relative; text-align: center; margin-bottom: 18px; }
+.compose-sheet .sheet-head { display: block; position: relative; text-align: center; margin-bottom: 16px; }
 .compose-sheet .avatar, .compose-sheet .sheet-sub { display: none; }
-.compose-sheet .sheet-title {
-  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive, sans-serif;
-  font-size: 23px; font-weight: 700; color: #34d399;
-}
+.compose-sheet .sheet-title { font-size: 19px; font-weight: 700; color: var(--accent); }
 .compose-sheet .sheet-head .ghost.icon {
   position: absolute; top: -4px; right: -2px; margin-left: 0;
   width: 30px; height: 30px; border-radius: 50%;
-  border: 2px solid #34d399; color: #34d399; background: transparent;
 }
-.compose-sheet .sheet-head .ghost.icon:hover { background: rgba(52, 211, 153, .12); }
 
 .compose-sheet .note-input {
-  min-height: 130px; border: 3px solid #34d399; border-radius: 20px;
-  background: transparent; color: #a7f3d3; caret-color: #34d399;
-  box-shadow: none; font-size: 15px;
+  min-height: 130px; border: 2.5px solid var(--line); border-radius: 18px;
 }
-.compose-sheet .note-input:hover { border-color: #34d399; }
+.compose-sheet .note-input:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .compose-sheet .note-input:focus {
-  border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(52, 211, 153, .22);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-/* replace the plain text placeholder with a hand-drawn "lines of text" doodle */
+/* a few hand-drawn squiggles standing in for the empty-state placeholder text */
 .compose-sheet .note-input:empty:before { content: ""; }
 .compose-sheet .note-input:empty {
   background-repeat: no-repeat; background-position: 18px 24px; background-size: 82% auto;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 100'%3E%3Cg stroke='%2334d399' stroke-width='6' stroke-linecap='round' fill='none' opacity='0.55'%3E%3Cpath d='M10 15 q8 -12 16 0 t16 0 t16 0 t16 0'/%3E%3Ccircle cx='98' cy='15' r='3.2' fill='%2334d399' stroke='none'/%3E%3Ccircle cx='114' cy='15' r='3.2' fill='%2334d399' stroke='none'/%3E%3Cpath d='M132 15 q8 -12 16 0 t16 0'/%3E%3Cpath d='M10 46 q10 -15 20 0 t20 0 t20 0 t20 0 t20 0'/%3E%3Cpath d='M10 74 q8 11 16 0 t16 0 t16 0'/%3E%3Ccircle cx='72' cy='74' r='3.2' fill='%2334d399' stroke='none'/%3E%3Cpath d='M92 74 q8 11 16 0 t16 0'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 100'%3E%3Cg stroke='%23d6483b' stroke-width='6' stroke-linecap='round' fill='none' opacity='0.28'%3E%3Cpath d='M10 15 q8 -12 16 0 t16 0 t16 0 t16 0'/%3E%3Ccircle cx='98' cy='15' r='3.2' fill='%23d6483b' stroke='none'/%3E%3Ccircle cx='114' cy='15' r='3.2' fill='%23d6483b' stroke='none'/%3E%3Cpath d='M132 15 q8 -12 16 0 t16 0'/%3E%3Cpath d='M10 46 q10 -15 20 0 t20 0 t20 0 t20 0 t20 0'/%3E%3Cpath d='M10 74 q8 11 16 0 t16 0 t16 0'/%3E%3Ccircle cx='72' cy='74' r='3.2' fill='%23d6483b' stroke='none'/%3E%3Cpath d='M92 74 q8 11 16 0 t16 0'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 .compose-sheet .note-actions { justify-content: center; margin-top: 16px; }
-.compose-sheet #composeSend {
-  background: transparent; color: #34d399; border: 3px solid #34d399;
-  border-radius: 999px; padding: 10px 36px; font-weight: 700; font-size: 15px;
-  box-shadow: none;
-}
-.compose-sheet #composeSend:hover { background: rgba(52, 211, 153, .12); filter: none; }
+.compose-sheet #composeSend { border-radius: 999px; padding: 10px 36px; font-size: 15px; }
 
 .file-list, .link-row { margin-top: 4px; }
 .file-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
