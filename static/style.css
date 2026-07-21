@@ -225,15 +225,24 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 22px 16px 120px; }
 .dz-icon { font-size: 26px; }
 .dz-text u { color: var(--ink); }
 .dz-actions { display: flex; justify-content: center; margin-top: 10px; }
-.note-row { display: flex; gap: 8px; margin-top: 12px; align-items: flex-end; }
+.note-row { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
 .note-input {
-  flex: 1; min-height: 42px; max-height: 200px; overflow-y: auto;
-  font: inherit; color: var(--ink); line-height: 1.45;
-  background: var(--paper); border: 1px solid var(--line); border-radius: 11px; padding: 9px 11px;
+  min-height: 110px; max-height: 320px; overflow-y: auto;
+  font: inherit; font-size: 15px; color: var(--ink); line-height: 1.55;
+  background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 16px;
   white-space: pre-wrap; word-break: break-word;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 4%, transparent);
+  transition: border-color .15s, box-shadow .15s;
 }
 .note-input:empty:before { content: attr(data-placeholder); color: var(--muted); }
-.note-input:focus, .link-row input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+.note-input:hover { border-color: color-mix(in srgb, var(--ink) 20%, var(--line)); }
+.note-input:focus, .link-row input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.note-actions { display: flex; justify-content: flex-end; }
+.note-actions .primary { padding: 10px 22px; }
 
 .file-list, .link-row { margin-top: 4px; }
 .file-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
